@@ -1,0 +1,23 @@
+@base_url = http://127.0.0.1:3000
+
+###
+
+GET {{base_url}}/hi
+
+###
+
+GET {{base_url}}/books
+
+###
+
+POST {{base_url}}/book
+Content-Type: application/json
+
+{
+  "title": "The Great Gatsby",
+  "author": "F. Scott Fitzgerald"
+}
+
+###
+
+GET {{base_url}}/book?title=The Great Gatsby
