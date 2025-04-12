@@ -1,16 +1,13 @@
 @base_url = http://127.0.0.1:3000
 
-###
-
+### Simple Hello World
 GET {{base_url}}/hi
 
-###
+### Search Open Library
+GET {{base_url}}/open-library/search?title=The Great Gatsby
 
-GET {{base_url}}/books
-
-###
-
-POST {{base_url}}/book
+### Create a New Book
+POST {{base_url}}/books/create
 Content-Type: application/json
 
 {
@@ -18,6 +15,59 @@ Content-Type: application/json
   "author": "F. Scott Fitzgerald"
 }
 
+### List All Books
+GET {{base_url}}/books/list
+
+### Get Book by ID
+GET {{base_url}}/books/get/1
+
+### Search Books
+GET {{base_url}}/books/search?title=The Great Gatsby&author=F. Scott Fitzgerald
+
+###
+
+GET {{base_url}}/books
+
 ###
 
 GET {{base_url}}/book?title=The Great Gatsby
+
+###
+
+### Book Club API Endpoints
+
+### Get All Book Clubs
+GET {{base_url}}/bookclubs
+Accept: application/json
+
+### Create a New Book Club
+POST {{base_url}}/bookclubs
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "Classic Literature Club",
+  "description": "A book club focused on classic literature",
+  "meetingFrequency": "MONTHLY",
+  "maxMembers": 20
+}
+
+### Get Book Club by ID
+GET {{base_url}}/bookclubs/1
+Accept: application/json
+
+### Update a Book Club
+PUT {{base_url}}/bookclubs/1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "Classic Literature Enthusiasts",
+  "description": "A book club focused on classic literature and deep discussions",
+  "meetingFrequency": "MONTHLY",
+  "maxMembers": 25
+}
+
+### Delete a Book Club
+DELETE {{base_url}}/bookclubs/1
+Accept: application/json

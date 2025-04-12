@@ -3,8 +3,16 @@ use serde::{Deserialize, Serialize};
 
 const BASE_URL: &str = "https://openlibrary.org/";
 
+const FIELDS: &str = "title,author_name,key";
 #[derive(Debug, Deserialize, Serialize)]
-pub struct SearchResponse {
+pub struct OpenLibBook {
+    pub title: String,
+    pub author_name: Option<Vec<String>>,
+    pub key: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SearchResponse {
     docs: Vec<OpenLibBook>,
 }
 
@@ -32,13 +40,4 @@ impl OpenLibraryClient {
 
         Ok(search_res.docs.into_iter().next())
     }
-}
-
-const FIELDS: &str = "title,author_name,key";
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct OpenLibBook {
-    pub title: String,
-    pub author_name: Option<Vec<String>>,
-    pub key: String,
 }
