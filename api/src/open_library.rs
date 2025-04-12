@@ -1,4 +1,3 @@
-use crate::Book;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -19,20 +18,7 @@ impl OpenLibraryClient {
         Self { client }
     }
 
-    pub async fn search_book(&self, title: &str) -> Result<Book> {
-        self.find_book(title)
-            .await
-            .map(|opt_book| {
-                opt_book.unwrap_or_else(|| OpenLibBook {
-                    title: title.to_string(),
-                    author_name: None,
-                    key: format!("/works/{}", title.to_lowercase().replace(' ', "-")),
-                })
-            })
-            .map(|book| book.into())
-    }
-
-    async fn find_book(&self, title: &str) -> Result<Option<OpenLibBook>> {
+    pub async fn search_book(&self, title: &str) -> Result<Option<OpenLibBook>> {
         let escaped_title = title.replace(' ', "+");
         let url = format!("{BASE_URL}/search.json?q={escaped_title}&fields={FIELDS}");
         tracing::info!("OpenLib URL: {}", url);
@@ -55,17 +41,4 @@ pub struct OpenLibBook {
     pub title: String,
     pub author_name: Option<Vec<String>>,
     pub key: String,
-}
-
-impl From<OpenLibBook> for crate::Book {
-    fn from(value: OpenLibBook) -> Self {
-        Self {
-            title: value.title,
-            author: value
-                .author_name
-                .map(|names| names.join(", "))
-                .unwrap_or_else(|| "Unknown".to_string()),
-            id: None,
-        }
-    }
 }

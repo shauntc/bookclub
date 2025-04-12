@@ -1,14 +1,13 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqliteConnection};
 
-use crate::{error::AppResult, open_library};
+use crate::error::AppResult;
 
 #[derive(Debug, FromRow, Serialize, Deserialize)]
 pub struct Book {
     pub title: String,
     pub author: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<i64>,
+    pub id: i64,
 }
 
 impl Book {

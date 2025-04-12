@@ -4,7 +4,7 @@ mod error;
 mod open_library;
 
 use book::Book;
-use error::{AppError, AppResult};
+use error::AppResult;
 use open_library::OpenLibraryClient;
 
 use anyhow::Result;
@@ -13,8 +13,9 @@ use tokio::net::TcpListener;
 
 use axum::{
     debug_handler,
-    extract::{Query, State},
-    response::IntoResponse,
+    extract::{Path, Query, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
     routing::{get, post},
     serve, Json, Router,
 };
@@ -33,10 +34,10 @@ struct AppState {
 async fn create_app(db_url: &str) -> Result<Router> {
     match Sqlite::database_exists(db_url).await? {
         true => info!("Database already exists"),
-        false => Sqlite::create_database(&db_url).await?,
+        false => Sqlite::create_database(db_url).await?,
     }
 
-    let db = SqlitePool::connect(&db_url).await?;
+    let db = SqlitePool::connect(db_url).await?;
 
     sqlx::migrate!("db/migrations").run(&db).await?;
 
@@ -48,6 +49,8 @@ async fn create_app(db_url: &str) -> Result<Router> {
         .route("/book", get(search_book))
         .route("/book", post(create_book))
         .route("/books", get(get_books))
+        .route("/books/{id}", get(get_book_by_id))
+        .route("/books/find", get(find_books))
         .with_state(app_state);
 
     Ok(app)
@@ -79,11 +82,19 @@ struct Params {
 async fn search_book(
     Query(Params { title }): Query<Params>,
     State(state): State<AppState>,
-) -> AppResult<impl IntoResponse> {
-    tracing::info!("Searching for book: {}", title);
-    let book = state.client.search_book(&title).await?;
-    tracing::info!("Found book: {:?}", book);
-    Ok(Json(book))
+) -> Response {
+    match state.client.search_book(&title).await {
+        Ok(Some(book)) => (StatusCode::OK, Json(book)).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "Book not found").into_response(),
+        Err(e) => {
+            tracing::error!("Error searching for book: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Error searching for book",
+            )
+                .into_response()
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -96,32 +107,20 @@ async fn create_book(
     State(state): State<AppState>,
     Json(BookParams { title, author }): Json<BookParams>,
 ) -> AppResult<impl IntoResponse> {
-    let book = Book {
-        title,
-        author,
-        id: None,
-    };
-
     let id = sqlx::query!(
         r#"
         INSERT INTO books (title, author)
         VALUES (?, ?)
         RETURNING id
         "#,
-        book.title,
-        book.author
+        title,
+        author
     )
     .fetch_one(&state.db)
     .await?
     .id;
 
-    match id {
-        Some(id) => Ok(Json(Book {
-            id: Some(id),
-            ..book
-        })),
-        None => Err(AppError::from(anyhow::anyhow!("Book not found"))),
-    }
+    Ok(Json(Book { title, author, id }))
 }
 
 #[debug_handler]
@@ -144,6 +143,56 @@ async fn get_books(State(state): State<AppState>) -> AppResult<Json<Vec<Book>>> 
     .collect::<Vec<_>>();
 
     Ok(Json(books))
+}
+
+#[debug_handler]
+async fn get_book_by_id(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> AppResult<Json<Book>> {
+    let book = sqlx::query_as!(Book, "SELECT title, author, id FROM books WHERE id = ?", id)
+        .fetch_one(&state.db)
+        .await?;
+    Ok(Json(book))
+}
+
+#[derive(Deserialize)]
+struct FindBookParams {
+    title: Option<String>,
+    author: Option<String>,
+}
+
+#[debug_handler]
+async fn find_books(
+    Query(params): Query<FindBookParams>,
+    State(state): State<AppState>,
+) -> Response {
+    if params.title.is_none() && params.author.is_none() {
+        return (StatusCode::BAD_REQUEST, "No search parameters provided").into_response();
+    }
+
+    let db_result = sqlx::query_as!(
+        Book,
+        "SELECT title, author, id FROM books WHERE title = ? OR author = ?",
+        params.title,
+        params.author
+    )
+    .fetch_all(&state.db)
+    .await;
+
+    match db_result {
+        Ok(books) => {
+            if books.is_empty() {
+                (StatusCode::NOT_FOUND, "No books found").into_response()
+            } else {
+                (StatusCode::OK, Json(books)).into_response()
+            }
+        }
+        Err(e) => {
+            tracing::error!("Error fetching books: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Error fetching books").into_response()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -178,9 +227,9 @@ mod tests {
         tracing::warn!("Response: {:?}", response);
 
         assert_eq!(response.status_code(), 200);
-        let book: Book = response.json();
+        let book: open_library::OpenLibBook = response.json();
         assert_eq!(book.title, "The Hobbit");
-        assert_eq!(book.author, "J.R.R. Tolkien");
+        assert_eq!(book.author_name.unwrap()[0], "J.R.R. Tolkien");
     }
 
     // Test the hello world endpoint
@@ -208,7 +257,14 @@ mod tests {
         let book: Book = response.json();
         assert_eq!(book.title, "Test Book");
         assert_eq!(book.author, "Test Author");
-        assert!(book.id.is_some());
+
+        // Test getting the book we just created
+        let response = server.get("/books").await;
+        assert_eq!(response.status_code(), 200);
+        let books: Vec<Book> = response.json();
+        assert!(!books.is_empty());
+        assert_eq!(books[0].title, "Test Book");
+        assert_eq!(books[0].author, "Test Author");
     }
 
     // Test getting all books
@@ -242,10 +298,53 @@ mod tests {
             .add_query_param("title", "Nonexistent Book Title That Should Not Exist")
             .await;
 
+        assert_eq!(response.status_code(), 404);
+    }
+
+    #[tokio::test]
+    async fn test_find_books() {
+        let server = create_test_server().await;
+
+        // First create a test book
+        server
+            .post("/book")
+            .json(&BookParams {
+                title: "Test Book".to_string(),
+                author: "Test Author".to_string(),
+            })
+            .await;
+
+        // Test finding by title
+        let response = server
+            .get("/books/find")
+            .add_query_param("title", "Test Book")
+            .await;
         assert_eq!(response.status_code(), 200);
-        let book: Book = response.json();
-        assert_eq!(book.title, "Nonexistent Book Title That Should Not Exist");
-        // Note: The OpenLibrary API might return a different book or no book at all
-        // This test might need adjustment based on actual API behavior
+        let books: Vec<Book> = response.json();
+        assert!(!books.is_empty());
+        assert_eq!(books[0].title, "Test Book");
+        assert_eq!(books[0].author, "Test Author");
+
+        // Test finding by author
+        let response = server
+            .get("/books/find")
+            .add_query_param("author", "Test Author")
+            .await;
+        assert_eq!(response.status_code(), 200);
+        let books: Vec<Book> = response.json();
+        assert!(!books.is_empty());
+        assert_eq!(books[0].title, "Test Book");
+        assert_eq!(books[0].author, "Test Author");
+
+        // Test finding with no parameters (should return 400)
+        let response = server.get("/books/find").await;
+        assert_eq!(response.status_code(), 400);
+
+        // Test finding non-existent book
+        let response = server
+            .get("/books/find")
+            .add_query_param("title", "Non-existent Book")
+            .await;
+        assert_eq!(response.status_code(), 404);
     }
 }
