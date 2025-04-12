@@ -6,15 +6,22 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.79"
-axum = { version = "*", features = ["macros"] }
-tokio = { version = "1.35.1", features = ["full"] }
-tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-shared = { workspace = true }
-# this version needs to be in lock-step with the version of teloxide (12 req 0.6)
-sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "sqlite"] }
-serde = { version = "1.0.196", features = ["derive"] }
-serde_json = "1.0.113"
-dotenv = "0.15.0"
+axum = { version = "0.8.0", features = ["macros"] }
+tokio = { version = "1.44.2", features = ["full"] }
+sqlx = { version = "0.6.3", features = [
+    "runtime-tokio-native-tls",
+    "sqlite",
+    "macros",
+] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
 reqwest = { version = "0.11.24", features = ["json"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+dotenv = "0.15.0"
+anyhow = "1.0.79"
+serde_with = "3.12.0"
+
+[dev-dependencies]
+axum-test = "17.3.0"
+tokio-test = "0.4.3"

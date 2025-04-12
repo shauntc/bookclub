@@ -1,31 +1,22 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqliteConnection};
 
-use crate::error::AppResult;
-use crate::open_library;
+use crate::{error::AppResult, open_library};
 
 #[derive(Debug, FromRow, Serialize, Deserialize)]
 pub struct Book {
     pub title: String,
-    pub author: Option<String>,
+    pub author: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<i64>,
 }
-impl Book {
-    pub fn from_open_library(
-        open_library::Book {
-            title, author_name, ..
-        }: open_library::Book,
-    ) -> Self {
-        Self {
-            title,
-            author: author_name.into_iter().next(),
-        }
-    }
 
+impl Book {
     pub async fn from_id(id: i64, db: &mut SqliteConnection) -> AppResult<Option<Self>> {
         let book = sqlx::query_as!(
             Book,
             r#"
-            SELECT title, author
+            SELECT title, author, id
             FROM books
             WHERE id = ?
             "#,
