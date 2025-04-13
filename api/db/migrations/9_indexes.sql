@@ -1,0 +1,10 @@
+CREATE INDEX idx_clubs_name ON clubs(name);
+CREATE INDEX idx_books_title ON books(title);
+CREATE INDEX idx_meetings_date ON meetings(date);
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_memberships_user_id_club_id ON memberships(user_id, club_id);
+CREATE INDEX idx_meetings_book ON meetings(book_id);
+CREATE INDEX idx_has_read_user_id ON has_read(user_id);
+CREATE INDEX idx_attendance_meeting_id ON attendance(meeting_id);
+CREATE INDEX idx_meetings_club_date ON meetings(club_id, date);
+CREATE INDEX idx_has_read_user_book ON has_read(user_id, book_id);

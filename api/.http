@@ -22,11 +22,7 @@ GET {{base_url}}/books/list
 GET {{base_url}}/books/get/1
 
 ### Search Books
-GET {{base_url}}/books/search?title=The Great Gatsby&author=F. Scott Fitzgerald
-
-###
-
-GET {{base_url}}/books
+GET {{base_url}}/books/search?title=The Great Gatsby&author=F. Scott Fitzgeral
 
 ###
 
