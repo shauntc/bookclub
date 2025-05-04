@@ -1,6 +1,8 @@
 mod books;
+mod clubs;
 mod error;
 mod open_library;
+mod users;
 
 use error::AppResult;
 use open_library::OpenLibraryClient;
@@ -10,7 +12,7 @@ use sqlx::{migrate::MigrateDatabase, Sqlite, SqlitePool};
 use tokio::{net::TcpListener, time::Instant};
 
 use axum::{
-    routing::{get, post},
+    routing::{delete, get, post, put},
     serve, Router,
 };
 use tokio::signal;
@@ -43,6 +45,27 @@ async fn create_app(db_url: &str) -> Result<Router> {
         .route("/books/list", get(books::get_books))
         .route("/books/get/{id}", get(books::get_book_by_id))
         .route("/books/search", get(books::find_books))
+        .route("/users/create", post(users::create_user))
+        .route("/users/list", get(users::get_users))
+        .route("/users/{id}", get(users::get_user_by_id))
+        .route("/users/{id}", put(users::update_user))
+        .route("/users/{id}", delete(users::delete_user))
+        .route("/users/search", get(users::find_users))
+        .route("/clubs", post(clubs::create_club))
+        .route("/clubs/list", get(clubs::get_clubs))
+        .route("/clubs/{id}", get(clubs::get_club_by_id))
+        .route("/clubs/{id}", put(clubs::update_club))
+        .route("/clubs/{id}", delete(clubs::delete_club))
+        .route("/memberships", post(clubs::memberships::create_membership))
+        .route("/memberships", get(clubs::memberships::get_memberships))
+        .route(
+            "/memberships/{id}",
+            get(clubs::memberships::get_membership_by_id),
+        )
+        .route(
+            "/memberships/{id}",
+            delete(clubs::memberships::delete_membership),
+        )
         .with_state(app_state);
 
     Ok(app)
@@ -101,16 +124,12 @@ async fn main() -> AppResult<()> {
 pub(crate) mod tests {
     use super::*;
     use axum_test::TestServer;
-    use std::sync::Once;
-
-    static INIT: Once = Once::new();
+    use tracing_test::traced_test;
 
     pub async fn create_test_server() -> TestServer {
-        INIT.call_once(|| {
-            tracing_subscriber::fmt().init();
-        });
-
         let db_url = "sqlite::memory:";
+        // force create a new db
+        Sqlite::create_database(db_url).await.unwrap();
         let app = create_app(db_url).await.unwrap();
 
         TestServer::new(app).unwrap()
@@ -118,6 +137,7 @@ pub(crate) mod tests {
 
     // Test the hello world endpoint
     #[tokio::test]
+    #[traced_test]
     async fn test_hello_endpoint() {
         let server = create_test_server().await;
         let response = server.get("/hi").await;
