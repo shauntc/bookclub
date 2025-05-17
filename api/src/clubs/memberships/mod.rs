@@ -31,7 +31,7 @@ pub async fn create_membership(
     }): Json<CreateMembershipParams>,
 ) -> AppResult<impl IntoResponse> {
     // Validate permission level
-    if permission_level < 0 || permission_level > 2 {
+    if !(0..=2).contains(&permission_level) {
         return Ok((
             StatusCode::BAD_REQUEST,
             "Permission level must be between 0 and 2",
