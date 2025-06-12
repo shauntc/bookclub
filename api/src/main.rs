@@ -1,14 +1,18 @@
+mod auth;
 mod books;
 mod clubs;
 mod error;
 mod open_library;
+mod settings;
+mod sqlite;
 mod users;
 
+use config::{Config, Environment};
 use error::AppResult;
 use open_library::OpenLibraryClient;
+use settings::Settings;
 
 use anyhow::Result;
-use sqlx::{migrate::MigrateDatabase, Sqlite, SqlitePool};
 use tokio::{net::TcpListener, time::Instant};
 
 use axum::{
@@ -25,15 +29,9 @@ struct AppState {
     client: OpenLibraryClient,
 }
 
-async fn create_app(db_url: &str) -> Result<Router> {
-    match Sqlite::database_exists(db_url).await? {
-        true => info!("Database already exists"),
-        false => Sqlite::create_database(db_url).await?,
-    }
-
-    let db = SqlitePool::connect(db_url).await?;
-
-    sqlx::migrate!("db/migrations").run(&db).await?;
+async fn create_app(config: Config) -> Result<Router> {
+    let settings = config.try_deserialize::<Settings>()?;
+    let db: sqlx::Pool<sqlx::Sqlite> = sqlite::create_pool(&settings.sqlite).await?;
 
     let client = OpenLibraryClient::new(reqwest::Client::new());
     let app_state = AppState { db, client };
@@ -73,17 +71,23 @@ async fn create_app(db_url: &str) -> Result<Router> {
 
 #[tokio::main]
 async fn main() -> AppResult<()> {
-    dotenv::dotenv().ok();
-    dotenv::from_path("./api/").ok();
-
     let start = Instant::now();
-
+    dotenv::dotenv().ok();
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .init();
-    let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL is not set");
 
-    let app = create_app(&db_url).await?;
+    let run_mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
+    info!("Running in {} mode", run_mode);
+
+    let config = config::Config::builder()
+        .add_source(config::File::with_name("config/base.json"))
+        .add_source(config::File::with_name(&format!("config/{}.json", run_mode)).required(false))
+        .add_source(Environment::default())
+        .build()
+        .expect("Failed to build config");
+
+    let app = create_app(config).await?;
 
     let port = std::env::var("API_PORT").unwrap_or("3000".to_string());
     let listener = TcpListener::bind(format!("0.0.0.0:{port}")).await?;
@@ -127,10 +131,14 @@ pub(crate) mod tests {
     use tracing_test::traced_test;
 
     pub async fn create_test_server() -> TestServer {
-        let db_url = "sqlite::memory:";
-        // force create a new db
-        Sqlite::create_database(db_url).await.unwrap();
-        let app = create_app(db_url).await.unwrap();
+        let config = Config::builder()
+            .add_source(config::File::with_name("config.toml"))
+            .set_override("sqlite.sqlite_url", "sqlite::memory:")
+            .expect("Failed to set override")
+            .build()
+            .expect("Failed to build config");
+
+        let app = create_app(config).await.unwrap();
 
         TestServer::new(app).unwrap()
     }

@@ -1,6 +1,3 @@
 [workspace]
 members = ["api", "shared", "telegram"]
 resolver = "2"
-
-[workspace.dependencies]
-shared = { path = "shared" }
