@@ -20,7 +20,7 @@ use axum::{
     serve, Router,
 };
 use tokio::signal;
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Clone)]
@@ -33,7 +33,7 @@ async fn create_app(config: Config) -> Result<Router> {
     let settings = config.try_deserialize::<Settings>()?;
     let db: sqlx::Pool<sqlx::Sqlite> = sqlite::create_pool(&settings.sqlite).await?;
 
-    let client = OpenLibraryClient::new(reqwest::Client::new());
+    let client = OpenLibraryClient::new(reqwest::Client::new(), settings.open_library);
     let app_state = AppState { db, client };
 
     let app = Router::new()
@@ -74,8 +74,10 @@ async fn main() -> AppResult<()> {
     let start = Instant::now();
     dotenv::dotenv().ok();
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
+        // .with_env_filter(EnvFilter::from_default_env())
         .init();
+
+    warn!("config default: {}", env!("CONFIG_DEFAULT"));
 
     #[cfg(debug_assertions)]
     let mode_config = option_env!("CONFIG_DEBUG");

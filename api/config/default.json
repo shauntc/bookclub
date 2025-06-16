@@ -1,1 +1,5 @@
-{}
+{
+    "open_library": {
+        "base_url": "https://openlibrary.org"
+    }
+}

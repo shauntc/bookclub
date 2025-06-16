@@ -62,7 +62,9 @@ fn copy_config_to_output() -> Result<()> {
             .to_string()
             .to_uppercase();
 
-        let contents = fs::read_to_string(path)?;
+        let json = serde_json::from_str::<serde_json::Value>(&fs::read_to_string(path)?)?;
+        let contents = serde_json::to_string(&json)?;
+
         println!("cargo:rustc-env=CONFIG_{}={}", config_name, contents);
         println!("cargo:warning=Set CONFIG_{} with contents", config_name);
     }

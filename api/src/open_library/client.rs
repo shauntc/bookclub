@@ -1,8 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-const BASE_URL: &str = "https://openlibrary.org/";
-
 const FIELDS: &str = "title,author_name,key";
 #[derive(Debug, Deserialize, Serialize)]
 pub struct OpenLibBook {
@@ -16,19 +14,28 @@ struct SearchResponse {
     docs: Vec<OpenLibBook>,
 }
 
+#[derive(Deserialize, Clone, Debug)]
+pub struct Settings {
+    base_url: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct OpenLibraryClient {
+    settings: Settings,
     client: reqwest::Client,
 }
 
 impl OpenLibraryClient {
-    pub fn new(client: reqwest::Client) -> Self {
-        Self { client }
+    pub fn new(client: reqwest::Client, settings: Settings) -> Self {
+        Self { client, settings }
     }
 
     pub async fn search_book(&self, title: &str) -> Result<Option<OpenLibBook>> {
         let escaped_title = title.replace(' ', "+");
-        let url = format!("{BASE_URL}/search.json?q={escaped_title}&fields={FIELDS}");
+        let url = format!(
+            "{}/search.json?q={escaped_title}&fields={FIELDS}",
+            self.settings.base_url
+        );
         tracing::info!("OpenLib URL: {}", url);
         let res = self.client.get(url).send().await?;
 
