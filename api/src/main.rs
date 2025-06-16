@@ -25,16 +25,23 @@ use tracing_subscriber::EnvFilter;
 
 #[derive(Clone)]
 struct AppState {
-    db: sqlx::Pool<sqlx::Sqlite>,
-    client: OpenLibraryClient,
+    db: sqlite::Database,
+    open_lib_client: OpenLibraryClient,
+    google_client: auth::google::Client,
 }
 
 async fn create_app(config: Config) -> Result<Router> {
     let settings = config.try_deserialize::<Settings>()?;
-    let db: sqlx::Pool<sqlx::Sqlite> = sqlite::create_pool(&settings.sqlite).await?;
+    let db = sqlite::Database::new(&settings.sqlite).await?;
 
-    let client = OpenLibraryClient::new(reqwest::Client::new(), settings.open_library);
-    let app_state = AppState { db, client };
+    let google_client =
+        auth::google::Client::new("http://127.0.0.1:3000".into(), settings.google_auth).await?;
+    let open_lib_client = OpenLibraryClient::new(reqwest::Client::new(), settings.open_library);
+    let app_state = AppState {
+        db,
+        open_lib_client,
+        google_client,
+    };
 
     let app = Router::new()
         .route("/hi", get(|| async { "Hello, World!" }))
@@ -64,6 +71,7 @@ async fn create_app(config: Config) -> Result<Router> {
             "/memberships/{id}",
             delete(clubs::memberships::delete_membership),
         )
+        .nest("/auth", auth::router())
         .with_state(app_state);
 
     Ok(app)
@@ -72,7 +80,6 @@ async fn create_app(config: Config) -> Result<Router> {
 #[tokio::main]
 async fn main() -> AppResult<()> {
     let start = Instant::now();
-    dotenv::dotenv().ok();
     tracing_subscriber::fmt()
         // .with_env_filter(EnvFilter::from_default_env())
         .init();
@@ -97,7 +104,7 @@ async fn main() -> AppResult<()> {
         ));
     }
 
-    config_builder = config_builder.add_source(Environment::default().separator("_"));
+    config_builder = config_builder.add_source(Environment::default().separator("."));
 
     let config = config_builder.build().expect("Failed to build config");
 
@@ -145,13 +152,25 @@ pub(crate) mod tests {
     use tracing_test::traced_test;
 
     pub async fn create_test_server() -> TestServer {
-        let config = Config::builder()
-            .add_source(config::File::with_name("config.toml"))
-            .set_override("sqlite.sqlite_url", "sqlite::memory:")
-            .expect("Failed to set override")
-            .build()
-            .expect("Failed to build config");
+        let default_config = env!("CONFIG_DEFAULT");
+        let mode_config = option_env!("CONFIG_TEST");
 
+        let mut config_builder = Config::builder().add_source(config::File::from_str(
+            default_config,
+            config::FileFormat::Json,
+        ));
+
+        if let Some(mode_config) = mode_config {
+            config_builder = config_builder.add_source(config::File::from_str(
+                mode_config,
+                config::FileFormat::Json,
+            ));
+        }
+        config_builder = config_builder
+            .set_override("sqlite.url", "sqlite::memory:")
+            .expect("Failed to set override");
+
+        let config = config_builder.build().expect("Failed to build config");
         let app = create_app(config).await.unwrap();
 
         TestServer::new(app).unwrap()

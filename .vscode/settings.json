@@ -2,6 +2,8 @@
     "cSpell.words": [
         "Bookclub",
         "chrono",
+        "httponly",
+        "openidconnect",
         "rustc",
         "serde",
         "sqlx"

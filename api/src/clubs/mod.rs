@@ -15,7 +15,7 @@ use axum::{
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::AppState;
+use crate::sqlite::Database;
 
 #[derive(Deserialize, Serialize)]
 pub struct CreateClubParams {
@@ -25,7 +25,7 @@ pub struct CreateClubParams {
 
 #[debug_handler]
 pub async fn create_club(
-    State(state): State<AppState>,
+    State(db): State<Database>,
     Json(CreateClubParams { name, description }): Json<CreateClubParams>,
 ) -> AppResult<impl IntoResponse> {
     let now = Utc::now().naive_utc();
@@ -40,7 +40,7 @@ pub async fn create_club(
         now,
         now
     )
-    .fetch_one(&state.db)
+    .fetch_one(db.as_ref())
     .await?
     .id;
 
@@ -52,7 +52,7 @@ pub async fn create_club(
         "#,
         id
     )
-    .fetch_one(&state.db)
+    .fetch_one(db.as_ref())
     .await?;
 
     Ok((StatusCode::CREATED, Json(club)).into_response())
@@ -66,7 +66,7 @@ pub struct UpdateClubParams {
 
 #[debug_handler]
 pub async fn update_club(
-    State(state): State<AppState>,
+    State(db): State<Database>,
     Path(id): Path<i64>,
     Json(params): Json<UpdateClubParams>,
 ) -> AppResult<Json<Club>> {
@@ -92,7 +92,7 @@ pub async fn update_club(
     query.push_bind(id);
     tracing::debug!("Query: {}", query.sql());
     let query = query.build();
-    query.execute(&state.db).await?;
+    query.execute(db.as_ref()).await?;
 
     let club = sqlx::query_as!(
         Club,
@@ -102,14 +102,14 @@ pub async fn update_club(
         "#,
         id
     )
-    .fetch_one(&state.db)
+    .fetch_one(db.as_ref())
     .await?;
 
     Ok(Json(club))
 }
 
 #[debug_handler]
-pub async fn get_clubs(State(state): State<AppState>) -> AppResult<Json<Vec<Club>>> {
+pub async fn get_clubs(State(db): State<Database>) -> AppResult<Json<Vec<Club>>> {
     let clubs = sqlx::query(
         r#"
         SELECT id, name, description, created_at, updated_at
@@ -117,7 +117,7 @@ pub async fn get_clubs(State(state): State<AppState>) -> AppResult<Json<Vec<Club
         ORDER BY id
         "#,
     )
-    .fetch_all(&state.db)
+    .fetch_all(db.as_ref())
     .await?
     .into_iter()
     .map(|row| Club {
@@ -134,7 +134,7 @@ pub async fn get_clubs(State(state): State<AppState>) -> AppResult<Json<Vec<Club
 
 #[debug_handler]
 pub async fn get_club_by_id(
-    State(state): State<AppState>,
+    State(db): State<Database>,
     Path(id): Path<i64>,
 ) -> AppResult<impl IntoResponse> {
     let club = sqlx::query_as!(
@@ -142,7 +142,7 @@ pub async fn get_club_by_id(
         "SELECT id, name, description, created_at, updated_at FROM clubs WHERE id = ?",
         id
     )
-    .fetch_optional(&state.db)
+    .fetch_optional(db.as_ref())
     .await?;
 
     match club {
@@ -153,11 +153,11 @@ pub async fn get_club_by_id(
 
 #[debug_handler]
 pub async fn delete_club(
-    State(state): State<AppState>,
+    State(db): State<Database>,
     Path(id): Path<i64>,
 ) -> AppResult<impl IntoResponse> {
     sqlx::query!("DELETE FROM clubs WHERE id = ?", id)
-        .execute(&state.db)
+        .execute(db.as_ref())
         .await?;
 
     Ok(StatusCode::NO_CONTENT)

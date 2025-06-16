@@ -5,7 +5,7 @@ pub use client::*;
 use crate::AppState;
 use axum::{
     debug_handler,
-    extract::{Query, State},
+    extract::{FromRef, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
@@ -19,9 +19,9 @@ pub struct Params {
 #[debug_handler]
 pub async fn search_book(
     Query(Params { title }): Query<Params>,
-    State(state): State<AppState>,
+    State(client): State<OpenLibraryClient>,
 ) -> Response {
-    match state.client.search_book(&title).await {
+    match client.search_book(&title).await {
         Ok(Some(book)) => (StatusCode::OK, Json(book)).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "Book not found").into_response(),
         Err(e) => {
@@ -32,6 +32,12 @@ pub async fn search_book(
             )
                 .into_response()
         }
+    }
+}
+
+impl FromRef<AppState> for OpenLibraryClient {
+    fn from_ref(state: &AppState) -> Self {
+        state.open_lib_client.clone()
     }
 }
 

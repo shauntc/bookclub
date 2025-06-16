@@ -2,7 +2,7 @@ mod membership;
 
 pub use membership::*;
 
-use crate::error::AppResult;
+use crate::{error::AppResult, sqlite::Database};
 use axum::{
     debug_handler,
     extract::{Path, State},
@@ -23,7 +23,7 @@ pub struct CreateMembershipParams {
 
 #[debug_handler]
 pub async fn create_membership(
-    State(state): State<AppState>,
+    State(db): State<Database>,
     Json(CreateMembershipParams {
         user_id,
         club_id,
@@ -49,7 +49,7 @@ pub async fn create_membership(
         club_id,
         permission_level
     )
-    .fetch_one(&state.db)
+    .fetch_one(db.as_ref())
     .await?
     .id;
 
@@ -62,7 +62,7 @@ pub async fn create_membership(
         "#,
         id
     )
-    .fetch_one(&state.db)
+    .fetch_one(db.as_ref())
     .await?;
 
     Ok((StatusCode::CREATED, Json(membership)).into_response())
@@ -70,7 +70,7 @@ pub async fn create_membership(
 
 #[debug_handler]
 pub async fn delete_membership(
-    State(state): State<AppState>,
+    State(db): State<Database>,
     Path(id): Path<i64>,
 ) -> AppResult<impl IntoResponse> {
     let result = sqlx::query!(
@@ -80,7 +80,7 @@ pub async fn delete_membership(
         "#,
         id
     )
-    .execute(&state.db)
+    .execute(db.as_ref())
     .await?;
 
     if result.rows_affected() == 0 {
@@ -91,7 +91,7 @@ pub async fn delete_membership(
 }
 
 #[debug_handler]
-pub async fn get_memberships(State(state): State<AppState>) -> AppResult<Json<Vec<Membership>>> {
+pub async fn get_memberships(State(db): State<Database>) -> AppResult<Json<Vec<Membership>>> {
     let memberships = sqlx::query_as!(
         Membership,
         r#"
@@ -100,7 +100,7 @@ pub async fn get_memberships(State(state): State<AppState>) -> AppResult<Json<Ve
         ORDER BY id
         "#
     )
-    .fetch_all(&state.db)
+    .fetch_all(db.as_ref())
     .await?;
 
     Ok(Json(memberships))
@@ -108,7 +108,7 @@ pub async fn get_memberships(State(state): State<AppState>) -> AppResult<Json<Ve
 
 #[debug_handler]
 pub async fn get_membership_by_id(
-    State(state): State<AppState>,
+    State(db): State<Database>,
     Path(id): Path<i64>,
 ) -> AppResult<impl IntoResponse> {
     let membership = sqlx::query_as!(
@@ -120,7 +120,7 @@ pub async fn get_membership_by_id(
         "#,
         id
     )
-    .fetch_optional(&state.db)
+    .fetch_optional(db.as_ref())
     .await?;
 
     match membership {

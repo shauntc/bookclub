@@ -1,5 +1,8 @@
 {
     "open_library": {
         "base_url": "https://openlibrary.org"
+    },
+    "google_auth": {
+        "client_id": "314191656155-kne347dbl306e20k3dgi77u9phmedlaf.apps.googleusercontent.com"
     }
 }

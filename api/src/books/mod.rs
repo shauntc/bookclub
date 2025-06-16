@@ -13,7 +13,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::AppState;
+use crate::sqlite::Database;
 
 #[derive(Deserialize, Serialize)]
 pub struct BookParams {
@@ -22,7 +22,7 @@ pub struct BookParams {
 }
 #[debug_handler]
 pub async fn create_book(
-    State(state): State<AppState>,
+    State(db): State<Database>,
     Json(BookParams { title, author }): Json<BookParams>,
 ) -> AppResult<impl IntoResponse> {
     let id = sqlx::query!(
@@ -34,7 +34,7 @@ pub async fn create_book(
         title,
         author
     )
-    .fetch_one(&state.db)
+    .fetch_one(db.as_ref())
     .await?
     .id;
 
@@ -42,7 +42,7 @@ pub async fn create_book(
 }
 
 #[debug_handler]
-pub async fn get_books(State(state): State<AppState>) -> AppResult<Json<Vec<Book>>> {
+pub async fn get_books(State(db): State<Database>) -> AppResult<Json<Vec<Book>>> {
     let books = sqlx::query(
         r#"
         SELECT title, author, id
@@ -50,7 +50,7 @@ pub async fn get_books(State(state): State<AppState>) -> AppResult<Json<Vec<Book
         ORDER BY id
         "#,
     )
-    .fetch_all(&state.db)
+    .fetch_all(db.as_ref())
     .await?
     .into_iter()
     .map(|row| Book {
@@ -65,11 +65,11 @@ pub async fn get_books(State(state): State<AppState>) -> AppResult<Json<Vec<Book
 
 #[debug_handler]
 pub async fn get_book_by_id(
-    State(state): State<AppState>,
+    State(db): State<Database>,
     Path(id): Path<i64>,
 ) -> AppResult<Json<Book>> {
     let book = sqlx::query_as!(Book, "SELECT title, author, id FROM books WHERE id = ?", id)
-        .fetch_one(&state.db)
+        .fetch_one(db.as_ref())
         .await?;
     Ok(Json(book))
 }
@@ -83,7 +83,7 @@ pub struct FindBookParams {
 #[debug_handler]
 pub async fn find_books(
     Query(params): Query<FindBookParams>,
-    State(state): State<AppState>,
+    State(db): State<Database>,
 ) -> Response {
     if params.title.is_none() && params.author.is_none() {
         return (StatusCode::BAD_REQUEST, "No search parameters provided").into_response();
@@ -95,7 +95,7 @@ pub async fn find_books(
         params.title,
         params.author
     )
-    .fetch_all(&state.db)
+    .fetch_all(db.as_ref())
     .await;
 
     match db_result {

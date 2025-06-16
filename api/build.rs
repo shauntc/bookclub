@@ -10,19 +10,20 @@ static MIGRATOR: Migrator = sqlx::migrate!("./db/migrations");
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    println!("cargo:rerun-if-changed=db/migrations");
-    println!("cargo:rerun-if-changed=config");
-
     let current_dir = std::env::current_dir()?;
 
     setup_db(&current_dir).await?;
 
     copy_config_to_output()?;
 
+    load_dot_env()?;
+
     Ok(())
 }
 
 async fn setup_db(current_dir: &Path) -> Result<()> {
+    println!("cargo:rerun-if-changed=db");
+
     let db_path = current_dir.join("db/bookclub.db");
     let db_url = format!("sqlite://{}", db_path.to_str().unwrap());
     let db_url = &db_url;
@@ -44,12 +45,14 @@ async fn setup_db(current_dir: &Path) -> Result<()> {
     println!("cargo::rustc-env=DATABASE_URL={}", db_url);
 
     // SQLITE_URL is read into the config
-    println!("cargo::rustc-env=SQLITE_URL={}", db_url);
+    println!("cargo::rustc-env=SQLITE.URL={}", db_url);
 
     Ok(())
 }
 
 fn copy_config_to_output() -> Result<()> {
+    println!("cargo:rerun-if-changed=config");
+
     for file in fs::read_dir("config")? {
         let file = file?;
         let path = file.path();
@@ -67,6 +70,20 @@ fn copy_config_to_output() -> Result<()> {
 
         println!("cargo:rustc-env=CONFIG_{}={}", config_name, contents);
         println!("cargo:warning=Set CONFIG_{} with contents", config_name);
+    }
+
+    Ok(())
+}
+
+fn load_dot_env() -> Result<()> {
+    println!("cargo:rerun-if-changed=.env");
+
+    let dot_env_path = std::env::current_dir()?.join(".env");
+    let contents = fs::read_to_string(dot_env_path)?;
+
+    for line in contents.lines() {
+        let (key, value) = line.split_once('=').unwrap();
+        println!("cargo:rustc-env={}={}", key, value);
     }
 
     Ok(())

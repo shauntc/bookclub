@@ -13,7 +13,7 @@ use axum::{
 };
 use sqlx::Row;
 
-use crate::AppState;
+use crate::sqlite::Database;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CreateUserParams {
@@ -23,43 +23,30 @@ pub struct CreateUserParams {
 }
 
 #[debug_handler]
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(db))]
 pub async fn create_user(
-    State(state): State<AppState>,
+    State(db): State<Database>,
     Json(params): Json<CreateUserParams>,
 ) -> AppResult<impl IntoResponse> {
-    let id: i64 = sqlx::query!(
+    let user: User = sqlx::query_as(
         r#"
         INSERT INTO users (email, first_name, last_name)
-        VALUES (?, ?, ?)
-        RETURNING id
+        VALUES (?, ?, ?)    
+        RETURNING *
         "#,
-        params.email,
-        params.first_name,
-        params.last_name
     )
-    .fetch_one(&state.db)
-    .await?
-    .id;
-
-    let user = sqlx::query_as!(
-        User,
-        r#"
-        SELECT id, email, first_name, last_name, 
-               created_at, updated_at
-        FROM users WHERE id = ?
-        "#,
-        id
-    )
-    .fetch_one(&state.db)
+    .bind(&params.email)
+    .bind(&params.first_name)
+    .bind(&params.last_name)
+    .fetch_one(db.as_ref())
     .await?;
 
     Ok(Json(user))
 }
 
 #[debug_handler]
-#[tracing::instrument(skip(state))]
-pub async fn get_users(State(state): State<AppState>) -> AppResult<Json<Vec<User>>> {
+#[tracing::instrument(skip(db))]
+pub async fn get_users(State(db): State<Database>) -> AppResult<Json<Vec<User>>> {
     let users = sqlx::query(
         r#"
         SELECT id, email, first_name, last_name, 
@@ -68,7 +55,7 @@ pub async fn get_users(State(state): State<AppState>) -> AppResult<Json<Vec<User
         ORDER BY id
         "#,
     )
-    .fetch_all(&state.db)
+    .fetch_all(db.as_ref())
     .await?
     .into_iter()
     .map(|row| User {
@@ -85,9 +72,9 @@ pub async fn get_users(State(state): State<AppState>) -> AppResult<Json<Vec<User
 }
 
 #[debug_handler]
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(db))]
 pub async fn get_user_by_id(
-    State(state): State<AppState>,
+    State(db): State<Database>,
     Path(id): Path<i64>,
 ) -> AppResult<impl IntoResponse> {
     let user = sqlx::query_as!(
@@ -99,7 +86,7 @@ pub async fn get_user_by_id(
         "#,
         id
     )
-    .fetch_optional(&state.db)
+    .fetch_optional(db.as_ref())
     .await?;
 
     match user {
@@ -115,9 +102,9 @@ pub struct UpdateUserParams {
     pub last_name: Option<String>,
 }
 #[debug_handler]
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(db))]
 pub async fn update_user(
-    State(state): State<AppState>,
+    State(db): State<Database>,
     Path(id): Path<i64>,
     Json(params): Json<UpdateUserParams>,
 ) -> AppResult<impl IntoResponse> {
@@ -143,7 +130,7 @@ pub async fn update_user(
     query.push_bind(id);
     tracing::debug!("Query: {}", query.sql());
     let query = query.build();
-    query.execute(&state.db).await?;
+    query.execute(db.as_ref()).await?;
 
     let user = sqlx::query_as!(
         User,
@@ -154,20 +141,20 @@ pub async fn update_user(
         "#,
         id
     )
-    .fetch_one(&state.db)
+    .fetch_one(db.as_ref())
     .await?;
 
     Ok(Json(user))
 }
 
 #[debug_handler]
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(db))]
 pub async fn delete_user(
-    State(state): State<AppState>,
+    State(db): State<Database>,
     Path(id): Path<i64>,
 ) -> AppResult<impl IntoResponse> {
     let result = sqlx::query!("DELETE FROM users WHERE id = ?", id)
-        .execute(&state.db)
+        .execute(db.as_ref())
         .await?;
 
     match result.rows_affected() {
@@ -184,10 +171,10 @@ pub struct FindUserParams {
     pub last_name: Option<String>,
 }
 #[debug_handler]
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(db))]
 pub async fn find_users(
     Query(params): Query<FindUserParams>,
-    State(state): State<AppState>,
+    State(db): State<Database>,
 ) -> Response {
     if params.email.is_none() && params.first_name.is_none() && params.last_name.is_none() {
         return (StatusCode::BAD_REQUEST, "No search parameters provided").into_response();
@@ -216,7 +203,7 @@ pub async fn find_users(
     tracing::debug!("Query: {}", query.sql());
 
     let query = query.build();
-    let db_result = query.fetch_all(&state.db).await;
+    let db_result = query.fetch_all(db.as_ref()).await;
 
     match db_result {
         Ok(rows) => {
