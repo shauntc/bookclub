@@ -77,15 +77,27 @@ async fn main() -> AppResult<()> {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    let run_mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
-    info!("Running in {} mode", run_mode);
+    #[cfg(debug_assertions)]
+    let mode_config = option_env!("CONFIG_DEBUG");
 
-    let config = config::Config::builder()
-        .add_source(config::File::with_name("config/base.json"))
-        .add_source(config::File::with_name(&format!("config/{}.json", run_mode)).required(false))
-        .add_source(Environment::default())
-        .build()
-        .expect("Failed to build config");
+    #[cfg(not(debug_assertions))]
+    let mode_config = option_env!("CONFIG_RELEASE");
+
+    let mut config_builder = config::Config::builder().add_source(config::File::from_str(
+        env!("CONFIG_DEFAULT"),
+        config::FileFormat::Json,
+    ));
+
+    if let Some(mode_config) = mode_config {
+        config_builder = config_builder.add_source(config::File::from_str(
+            mode_config,
+            config::FileFormat::Json,
+        ));
+    }
+
+    config_builder = config_builder.add_source(Environment::default().separator("_"));
+
+    let config = config_builder.build().expect("Failed to build config");
 
     let app = create_app(config).await?;
 

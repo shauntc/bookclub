@@ -4,15 +4,15 @@ use sqlx::{migrate::MigrateDatabase, Sqlite, SqlitePool};
 
 #[derive(Debug, Deserialize)]
 pub struct Settings {
-    pub sqlite_url: String,
+    pub url: String,
 }
 
 pub async fn create_pool(settings: &Settings) -> Result<SqlitePool> {
-    match Sqlite::database_exists(&settings.sqlite_url).await? {
+    match Sqlite::database_exists(&settings.url).await? {
         true => tracing::info!("Database already exists"),
-        false => Sqlite::create_database(&settings.sqlite_url).await?,
+        false => Sqlite::create_database(&settings.url).await?,
     }
-    let pool = SqlitePool::connect(&settings.sqlite_url).await?;
+    let pool = SqlitePool::connect(&settings.url).await?;
 
     sqlx::migrate!("db/migrations").run(&pool).await?;
 

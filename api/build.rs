@@ -1,11 +1,6 @@
-use std::{
-    env,
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use std::{fs, path::Path, str::FromStr};
 
 use anyhow::Result;
-use fs_extra::{dir, file};
 use sqlx::{
     migrate::Migrator,
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
@@ -55,16 +50,22 @@ async fn setup_db(current_dir: &Path) -> Result<()> {
 }
 
 fn copy_config_to_output() -> Result<()> {
-    let out_dir: PathBuf = env::var("OUT_DIR").expect("OUT_DIR is not set").into();
+    for file in fs::read_dir("config")? {
+        let file = file?;
+        let path = file.path();
+        let config_name = file
+            .file_name()
+            .to_string_lossy()
+            .rsplit_once('.')
+            .map(|(name, _)| name)
+            .unwrap_or_default()
+            .to_string()
+            .to_uppercase();
 
-    dir::create_all(&out_dir, true)?;
-
-    dir::copy("config", &out_dir, &dir::CopyOptions::new())?;
-    println!("cargo:warning=Copied config to {}", &out_dir.display());
-
-    let env_path = out_dir.join(".env");
-    file::copy("./.env", &env_path, &file::CopyOptions::new())?;
-    println!("cargo:warning=Copied .env to {}", &env_path.display());
+        let contents = fs::read_to_string(path)?;
+        println!("cargo:rustc-env=CONFIG_{}={}", config_name, contents);
+        println!("cargo:warning=Set CONFIG_{} with contents", config_name);
+    }
 
     Ok(())
 }

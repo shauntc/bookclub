@@ -32,7 +32,6 @@ axum-test = "17.3.0"
 tokio-test = "0.4.3"
 
 [build-dependencies]
-config = { version = "0.15.11", features = ["json", "json5", "toml"] }
 sqlx = { version = "0.6.3", features = [
     "runtime-tokio-native-tls",
     "sqlite",
